@@ -13,3 +13,9 @@ __pycache__/
 test_vibe_repo/
 test_scan_result.json
 .cursorrules
+
+# Private Strategy & Marketing Playbooks
+LAUNCH_PLAYBOOK.md
+*playbook*
+*strategy*
+marketing/
