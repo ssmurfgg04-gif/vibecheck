@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VibeCheck — Pre-Flight Security Scanner for Vibe-Coded Apps</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0d12;
+      --surface:   #13171f;
+      --surface-2: #1b212b;
+      --border:    #2a3241;
+      --text:      #f0f6fc;
+      --muted:     #8b949e;
+      --accent:    #58a6ff;
+      --accent-glow: rgba(88, 166, 255, 0.15);
+      --red:       #f85149;
+      --red-bg:    #1e1014;
+      --yellow:    #d29922;
+      --yellow-bg: #1c180a;
+      --green:     #3fb950;
+      --green-bg:  #0d2216;
+      --purple:    #bc8cff;
+      --radius:    12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 50px 20px 80px;
+    }
+
+    header { text-align: center; margin-bottom: 36px; max-width: 680px; }
+
+    .badge-top {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--purple);
+      background: rgba(188, 140, 255, 0.12);
+      border: 1px solid rgba(188, 140, 255, 0.25);
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+    }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .logo-icon {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, #bc8cff, #58a6ff);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 4px 20px rgba(188, 140, 255, 0.3);
+    }
+    .logo-text {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+    }
+
+    .tagline {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* Target stack tags */
+    .stack-tags {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .tag {
+      font-size: 11px;
+      font-weight: 500;
+      color: #adbac7;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    /* Scan Box */
+    .scan-box {
+      width: 100%;
+      max-width: 660px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: #0a0d12;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 12px 16px;
+      outline: none;
+      transition: all 0.2s;
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    input[type="text"]::placeholder { color: #57606a; }
+
+    button#scanBtn {
+      background: linear-gradient(135deg, #58a6ff, #bc8cff);
+      color: #0a0d12;
+      font-weight: 700;
+      font-size: 14px;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 22px;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    button#scanBtn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+    button#scanBtn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .hint {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Status Loader */
+    #status {
+      width: 100%;
+      max-width: 660px;
+      margin-top: 24px;
+      text-align: center;
+      font-size: 14px;
+      color: var(--muted);
+      display: none;
+    }
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Results */
+    #results {
+      width: 100%;
+      max-width: 660px;
+      margin-top: 24px;
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* Vibe Score Card */
+    .score-banner {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .score-left { display: flex; align-items: center; gap: 16px; }
+    .score-circle {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      border: 3px solid;
+    }
+    .score-info h3 { font-size: 16px; font-weight: 700; }
+    .score-info p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* Findings Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left-width: 4px;
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      transition: border-color 0.15s;
+    }
+    .card.CRITICAL { border-left-color: #ff3838; background: #1c0e12; }
+    .card.ERROR    { border-left-color: var(--red); background: var(--red-bg); }
+    .card.WARNING  { border-left-color: var(--yellow); background: var(--yellow-bg); }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+    .badge.CRITICAL { background: #4d0a12; color: #ff6b6b; }
+    .badge.ERROR    { background: #3d1010; color: var(--red); }
+    .badge.WARNING  { background: #2e2000; color: var(--yellow); }
+
+    .category-badge {
+      font-size: 11px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      padding: 2px 7px;
+      border-radius: 4px;
+      color: var(--muted);
+    }
+
+    .file-ref {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+
+    .plain-english {
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 12px;
+      color: #e6edf3;
+    }
+
+    .code-block {
+      background: #080b0f;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      color: #adbac7;
+      overflow-x: auto;
+      margin-bottom: 14px;
+      white-space: pre-wrap;
+    }
+
+    /* Prompt Box for Cursor */
+    .prompt-box {
+      background: rgba(188, 140, 255, 0.06);
+      border: 1px solid rgba(188, 140, 255, 0.2);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .prompt-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--purple);
+    }
+    .copy-btn {
+      background: #bc8cff;
+      color: #0a0d12;
+      border: none;
+      font-weight: 700;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { opacity: 0.85; }
+    .prompt-text {
+      font-size: 12px;
+      color: #c9d1d9;
+      font-family: ui-monospace, monospace;
+      line-height: 1.5;
+    }
+
+    .clean-card {
+      background: var(--green-bg);
+      border: 1px solid #1a3d22;
+      border-radius: var(--radius);
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: var(--green);
+    }
+
+    footer {
+      margin-top: 50px;
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="badge-top">⚡ Built for Cursor & Claude Code Apps</div>
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    <span class="logo-text">VibeCheck</span>
+  </div>
+  <p class="tagline">
+    Scan your vibe-coded project for leaked keys, open Supabase tables, and unprotected server actions. Get 1-click prompts to auto-patch them.
+  </p>
+  <div class="stack-tags">
+    <span class="tag">Next.js App Router</span>
+    <span class="tag">Supabase RLS</span>
+    <span class="tag">Server Actions</span>
+    <span class="tag">OpenAI & Stripe Keys</span>
+  </div>
+</header>
+
+<div class="scan-box">
+  <div class="input-row">
+    <input
+      type="text"
+      id="urlInput"
+      placeholder="https://github.com/username/my-vibe-app"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <button id="scanBtn" onclick="startScan()">Scan Vibe App →</button>
+  </div>
+  <div class="hint">
+    <span>Public GitHub repositories</span>
+    <span>Auto-generates Cursor/Claude fix prompts</span>
+  </div>
+</div>
+
+<div id="status">
+  <span class="spinner"></span>
+  <span id="statusText">Cloning repository…</span>
+</div>
+
+<div id="results"></div>
+
+<footer>
+  VibeCheck MVP &nbsp;·&nbsp; Zero config &nbsp;·&nbsp; No credentials stored
+</footer>
+
+<script>
+  const API = window.location.origin;
+
+  const statusMessages = [
+    "Cloning repository into secure sandbox…",
+    "Checking Supabase RLS policies and Next.js routes…",
+    "Hunting for hardcoded AI & Stripe secret keys…",
+    "Generating 1-click Cursor prompts…",
+  ];
+
+  let statusInterval;
+
+  function cycleStatus() {
+    let i = 0;
+    document.getElementById("status").style.display = "block";
+    document.getElementById("statusText").textContent = statusMessages[0];
+    statusInterval = setInterval(() => {
+      i = Math.min(i + 1, statusMessages.length - 1);
+      document.getElementById("statusText").textContent = statusMessages[i];
+    }, 6000);
+  }
+
+  function stopStatus() {
+    clearInterval(statusInterval);
+    document.getElementById("status").style.display = "none";
+  }
+
+  function escHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function copyPrompt(btn, text) {
+    navigator.clipboard.writeText(text);
+    const orig = btn.innerText;
+    btn.innerText = "✓ Copied!";
+    btn.style.background = "#3fb950";
+    setTimeout(() => {
+      btn.innerText = orig;
+      btn.style.background = "#bc8cff";
+    }, 2000);
+  }
+
+  function renderResults(data) {
+    const container = document.getElementById("results");
+    container.innerHTML = "";
+    container.style.display = "flex";
+
+    if (data.clean) {
+      container.innerHTML = `
+        <div class="clean-card">
+          <div style="font-size: 32px">🚀</div>
+          <div>
+            <h3 style="font-size: 16px; margin-bottom: 4px">Vibe Score: 100/100 · Clean!</h3>
+            <p style="font-size: 13px; opacity: 0.9">${data.message}</p>
+          </div>
+        </div>`;
+      return;
+    }
+
+    // Score Banner
+    const scoreDiv = document.createElement("div");
+    scoreDiv.className = "score-banner";
+    scoreDiv.innerHTML = `
+      <div class="score-left">
+        <div class="score-circle" style="border-color: ${data.color}; color: ${data.color}">
+          ${data.score}
+        </div>
+        <div class="score-info">
+          <h3>Vibe Safety: ${data.label}</h3>
+          <p>${data.findings.length} critical security flaw(s) found before production</p>
+        </div>
+      </div>`;
+    container.appendChild(scoreDiv);
+
+    // Cards
+    for (const f of data.findings) {
+      const card = document.createElement("div");
+      card.className = `card ${f.severity}`;
+
+      const codeHtml = f.code ? `<div class="code-block">${escHtml(f.code)}</div>` : "";
+      const promptEscaped = escHtml(f.cursor_prompt || f.fix);
+
+      card.innerHTML = `
+        <div class="card-top">
+          <span class="badge ${f.severity}">${f.severity}</span>
+          ${f.category ? `<span class="category-badge">${escHtml(f.category)}</span>` : ""}
+          <span class="file-ref">${escHtml(f.file)}:${f.line}</span>
+        </div>
+        <div class="plain-english">${escHtml(f.plain_english || f.message)}</div>
+        ${codeHtml}
+        <div class="prompt-box">
+          <div class="prompt-header">
+            <span>🤖 Prompt to paste into Cursor / Claude</span>
+            <button class="copy-btn" onclick="copyPrompt(this, '${promptEscaped.replace(/'/g, "\\'")}')">Copy Prompt</button>
+          </div>
+          <div class="prompt-text">${promptEscaped}</div>
+        </div>`;
+
+      container.appendChild(card);
+    }
+  }
+
+  function renderError(msg) {
+    const container = document.getElementById("results");
+    container.innerHTML = `
+      <div style="background: #1e1014; border: 1px solid #3d1010; border-radius: 12px; padding: 18px; color: #f85149; font-size: 14px">
+        ⚠️ ${escHtml(msg)}
+      </div>`;
+    container.style.display = "flex";
+  }
+
+  async function startScan() {
+    const url = document.getElementById("urlInput").value.trim();
+    if (!url) return;
+
+    document.getElementById("scanBtn").disabled = true;
+    document.getElementById("results").style.display = "none";
+    cycleStatus();
+
+    try {
+      const res = await fetch(`${API}/api/scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github_url: url }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        renderError(data.detail || "Scan request failed.");
+      } else {
+        renderResults(data);
+      }
+    } catch (err) {
+      renderError("Failed to reach server. Please ensure the backend is running.");
+    } finally {
+      stopStatus();
+      document.getElementById("scanBtn").disabled = false;
+    }
+  }
+
+  document.getElementById("urlInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") startScan();
+  });
+</script>
+</body>
+</html>

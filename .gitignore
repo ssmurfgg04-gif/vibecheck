@@ -1,0 +1,15 @@
+# Environments & dependencies
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+
+# Secrets & local env
+.env
+.env.local
+*.log
+
+# Temp & testing
+test_vibe_repo/
+test_scan_result.json
+.cursorrules

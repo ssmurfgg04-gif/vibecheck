@@ -1,0 +1,23 @@
+{
+  "name": "vibecheck-scan",
+  "version": "1.0.0",
+  "description": "Zero-trust local security scanner & .cursorrules generator for vibe-coded apps",
+  "main": "./bin/vibecheck.js",
+  "bin": {
+    "vibecheck": "bin/vibecheck.js",
+    "vibecheck-scan": "bin/vibecheck.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "keywords": [
+    "vibe-coding",
+    "cursor",
+    "security",
+    "supabase",
+    "nextjs",
+    "cursorrules"
+  ],
+  "author": "",
+  "license": "MIT"
+}
