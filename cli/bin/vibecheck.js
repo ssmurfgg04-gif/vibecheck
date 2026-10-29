@@ -120,11 +120,11 @@ const SURGICAL_CURSORRULES = `# VIBE-CODING SECURITY GUARDRAILS (Auto-generated 
 `;
 
 function scanDirectory(dir, findings = []) {
-  const IGNORE = new Set(['node_modules', '.git', '.next', 'dist', 'build', '.venv']);
+  const IGNORE = new Set(['node_modules', '.git', '.next', 'dist', 'build', '.venv', 'package-lock.json']);
   const files = fs.readdirSync(dir);
 
   for (const f of files) {
-    if (IGNORE.has(f)) continue;
+    if (IGNORE.has(f) || f === 'vibecheck.js') continue;
     const fullPath = path.join(dir, f);
     const stat = fs.statSync(fullPath);
 
@@ -247,14 +247,127 @@ function checkAndOfferCursorrules(targetDir) {
   }
 }
 
+function startMcpServer() {
+  const readline = require('readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false
+  });
+
+  const sendResponse = (id, result) => {
+    const res = JSON.stringify({ jsonrpc: '2.0', id, result });
+    process.stdout.write(res + '\n');
+  };
+
+  const sendError = (id, code, message) => {
+    const res = JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } });
+    process.stdout.write(res + '\n');
+  };
+
+  rl.on('line', (line) => {
+    if (!line.trim()) return;
+    try {
+      const msg = JSON.parse(line);
+      const { id, method, params } = msg;
+
+      if (method === 'initialize') {
+        sendResponse(id, {
+          protocolVersion: '2024-11-05',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'vibecheck', version: '1.0.0' }
+        });
+      } else if (method === 'notifications/initialized') {
+        // Notification, no reply needed
+      } else if (method === 'ping') {
+        sendResponse(id, {});
+      } else if (method === 'tools/list') {
+        sendResponse(id, {
+          tools: [
+            {
+              name: 'vibecheck_scan',
+              description: 'Run 100% offline security, secret leak, and RLS vulnerability audit of the target codebase.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  path: {
+                    type: 'string',
+                    description: 'Path of repository or directory to scan (defaults to current working directory).'
+                  }
+                }
+              }
+            },
+            {
+              name: 'vibecheck_generate_rules',
+              description: 'Generates a surgical .cursorrules guardrail file in the target project to enforce secure Supabase and Next.js patterns.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  path: {
+                    type: 'string',
+                    description: 'Directory where .cursorrules should be written.'
+                  }
+                }
+              }
+            }
+          ]
+        });
+      } else if (method === 'tools/call') {
+        const toolName = params?.name;
+        const toolArgs = params?.arguments || {};
+        const scanDir = toolArgs.path ? path.resolve(toolArgs.path) : process.cwd();
+
+        if (toolName === 'vibecheck_scan') {
+          const findings = scanDirectory(scanDir);
+          let report = `VibeCheck Security Audit Report for ${scanDir}:\n`;
+          if (findings.length === 0) {
+            report += '✅ Status: CLEAN. Zero security vulnerabilities or secret leaks detected.\n';
+          } else {
+            report += `🚨 Detected ${findings.length} security vulnerability(ies):\n\n`;
+            findings.forEach((f, idx) => {
+              report += `${idx + 1}. [${f.check.severity}] ${f.check.name}\n`;
+              report += `   File: ${f.file}:${f.lineNum}\n`;
+              report += `   Code: ${f.lineSnippet}\n`;
+              report += `   Risk: ${f.check.desc}\n`;
+              report += `   Remediation: ${f.check.fixAction}\n\n`;
+            });
+          }
+          sendResponse(id, {
+            content: [{ type: 'text', text: report }]
+          });
+        } else if (toolName === 'vibecheck_generate_rules') {
+          const cursorRulesPath = path.join(scanDir, '.cursorrules');
+          fs.writeFileSync(cursorRulesPath, SURGICAL_CURSORRULES, 'utf8');
+          sendResponse(id, {
+            content: [{ type: 'text', text: `Successfully generated surgical .cursorrules at ${cursorRulesPath}` }]
+          });
+        } else {
+          sendError(id, -32601, `Unknown tool: ${toolName}`);
+        }
+      } else if (id !== undefined) {
+        sendError(id, -32601, `Method not supported: ${method}`);
+      }
+    } catch (e) {
+      // Ignore malformed input
+    }
+  });
+}
+
 async function run() {
   const args = process.argv.slice(2);
+
+  if (args.includes('--mcp')) {
+    startMcpServer();
+    return;
+  }
 
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`
 ${COLORS.purple}${COLORS.bold}🛡️  VIBECHECK LOCAL SECURITY SCANNER${COLORS.reset}
 Usage:
   npx vibecheck [dir]               Run 100% offline security scan on your repo
+  npx vibecheck --json [dir]        Output raw JSON report for CI/CD pipelines
+  npx vibecheck --mcp               Start Model Context Protocol (MCP) server for Cursor & Claude
   npx vibecheck --probe <url> <key> Simulate anonymous external attack on live Supabase endpoint
   npx vibecheck --rules-only        Only generate the surgical .cursorrules file
   npx vibecheck --version           Show current version
@@ -284,13 +397,37 @@ Usage:
     return;
   }
 
-  console.log(`\n${COLORS.purple}${COLORS.bold}🛡️  VIBECHECK LOCAL SECURITY SCANNER${COLORS.reset}`);
-  console.log(`${COLORS.dim}[Offline mode: 0 network requests made · 100% local inside your private repo]${COLORS.reset}\n`);
-
-  const targetDir = args[0] && !args[0].startsWith('--') ? path.resolve(args[0]) : process.cwd();
-  console.log(`Scanning: ${COLORS.cyan}${targetDir}${COLORS.reset}...\n`);
+  const isJson = args.includes('--json');
+  const dirArg = args.find(a => !a.startsWith('--'));
+  const targetDir = dirArg ? path.resolve(dirArg) : process.cwd();
 
   const findings = scanDirectory(targetDir);
+
+  if (isJson) {
+    const report = {
+      timestamp: new Date().toISOString(),
+      targetDirectory: targetDir,
+      status: findings.length === 0 ? 'CLEAN' : 'VULNERABILITIES_FOUND',
+      vulnerabilityCount: findings.length,
+      findings: findings.map(f => ({
+        id: f.check.id,
+        severity: f.check.severity,
+        name: f.check.name,
+        file: f.file,
+        lineNum: f.lineNum,
+        lineSnippet: f.lineSnippet,
+        description: f.check.desc,
+        remediation: f.check.fixAction,
+        patchSql: f.check.patchSql
+      }))
+    };
+    console.log(JSON.stringify(report, null, 2));
+    process.exit(findings.length === 0 ? 0 : 1);
+  }
+
+  console.log(`\n${COLORS.purple}${COLORS.bold}🛡️  VIBECHECK LOCAL SECURITY SCANNER${COLORS.reset}`);
+  console.log(`${COLORS.dim}[Offline mode: 0 network requests made · 100% local inside your private repo]${COLORS.reset}\n`);
+  console.log(`Scanning: ${COLORS.cyan}${targetDir}${COLORS.reset}...\n`);
 
   if (findings.length === 0) {
     console.log(`${COLORS.green}${COLORS.bold}✅ ZERO VIBE-CODING SECURITY FLAWS FOUND!${COLORS.reset}`);

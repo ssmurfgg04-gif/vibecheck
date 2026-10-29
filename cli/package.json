@@ -1,7 +1,7 @@
 {
   "name": "vibecheck-scan",
-  "version": "1.0.0",
-  "description": "Zero-trust local security scanner & .cursorrules generator for vibe-coded apps",
+  "version": "1.0.1",
+  "description": "Zero-trust local security scanner, MCP server & .cursorrules generator for vibe-coded apps",
   "main": "./bin/vibecheck.js",
   "bin": {
     "vibecheck": "bin/vibecheck.js",
@@ -16,7 +16,12 @@
     "security",
     "supabase",
     "nextjs",
-    "cursorrules"
+    "cursorrules",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "code-audit",
+    "claude-desktop"
   ],
   "author": "",
   "license": "MIT"
